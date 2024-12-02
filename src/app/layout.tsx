@@ -22,7 +22,6 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           <div className="flex h-screen">
-            <Navigation />
             <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
               <AuthProvider>
                 {children}

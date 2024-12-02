@@ -1,27 +1,55 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore"
-import { db } from "@/lib/firebase"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useState, useEffect } from "react";
+import {
+  collection,
+  query,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Product = {
-  id: string
-  name: string
-  category: string
-  unit: string
-  unpackedStock: number
-  packedStock: number
-  packedSize: number
-}
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  unpackedStock: number;
+  packedStock: number;
+  packedSize: number;
+  price: number;
+};
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>([])
+  const [products, setProducts] = useState<Product[]>([]);
   const [newProduct, setNewProduct] = useState<Omit<Product, "id">>({
     name: "",
     category: "",
@@ -29,32 +57,41 @@ export default function ProductsPage() {
     unpackedStock: 0,
     packedStock: 0,
     packedSize: 0,
-  })
+    price: 0,
+  });
 
   useEffect(() => {
-    const q = query(collection(db, "products"))
+    const q = query(collection(db, "products"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const productsArray: Product[] = []
+      const productsArray: Product[] = [];
       querySnapshot.forEach((doc) => {
-        productsArray.push({ id: doc.id, ...doc.data() } as Product)
-      })
-      setProducts(productsArray)
-    })
-    return () => unsubscribe()
-  }, [])
+        productsArray.push({ id: doc.id, ...doc.data() } as Product);
+      });
+      setProducts(productsArray);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const addProduct = async () => {
-    await addDoc(collection(db, "products"), newProduct)
-    setNewProduct({ name: "", category: "", unit: "", unpackedStock: 0, packedStock: 0, packedSize: 0 })
-  }
-
-  const updateProduct = async (id: string, data: Partial<Product>) => {
-    await updateDoc(doc(db, "products", id), data)
-  }
+    if (!newProduct.name || !newProduct.category || !newProduct.unit || !newProduct.price) {
+      alert("Please fill out all required fields.");
+      return;
+    }
+    await addDoc(collection(db, "products"), newProduct);
+    setNewProduct({
+      name: "",
+      category: "",
+      unit: "",
+      unpackedStock: 0,
+      packedStock: 0,
+      packedSize: 0,
+      price: 0,
+    });
+  };
 
   const deleteProduct = async (id: string) => {
-    await deleteDoc(doc(db, "products", id))
-  }
+    await deleteDoc(doc(db, "products", id));
+  };
 
   return (
     <div className="container mx-auto py-10">
@@ -75,7 +112,9 @@ export default function ProductsPage() {
               <Input
                 id="name"
                 value={newProduct.name}
-                onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                onChange={(e) =>
+                  setNewProduct({ ...newProduct, name: e.target.value })
+                }
                 className="col-span-3"
               />
             </div>
@@ -83,15 +122,23 @@ export default function ProductsPage() {
               <Label htmlFor="category" className="text-right">
                 Category
               </Label>
-              <Select onValueChange={(value) => setNewProduct({ ...newProduct, category: value })}>
+              <Select
+                onValueChange={(value) =>
+                  setNewProduct({ ...newProduct, category: value })
+                }
+              >
                 <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="detergents">Detergents</SelectItem>
-                  <SelectItem value="spices">Spices</SelectItem>
+                  <SelectItem value="surf">Surf</SelectItem>
+                  <SelectItem value="masala-sachet">Masala Sachet</SelectItem>
+                  <SelectItem value="masala-packet">Masala Packet</SelectItem>
                   <SelectItem value="sweets">Sweets</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  <SelectItem value="razors">Razors</SelectItem>
+                  <SelectItem value="shampoo">Shampoo</SelectItem>
+                  <SelectItem value="beauty-products">Beauty Products
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -102,7 +149,9 @@ export default function ProductsPage() {
               <Input
                 id="unit"
                 value={newProduct.unit}
-                onChange={(e) => setNewProduct({ ...newProduct, unit: e.target.value })}
+                onChange={(e) =>
+                  setNewProduct({ ...newProduct, unit: e.target.value })
+                }
                 className="col-span-3"
               />
             </div>
@@ -114,7 +163,12 @@ export default function ProductsPage() {
                 id="unpackedStock"
                 type="number"
                 value={newProduct.unpackedStock}
-                onChange={(e) => setNewProduct({ ...newProduct, unpackedStock: Number(e.target.value) })}
+                onChange={(e) =>
+                  setNewProduct({
+                    ...newProduct,
+                    unpackedStock: Number(e.target.value),
+                  })
+                }
                 className="col-span-3"
               />
             </div>
@@ -126,7 +180,12 @@ export default function ProductsPage() {
                 id="packedStock"
                 type="number"
                 value={newProduct.packedStock}
-                onChange={(e) => setNewProduct({ ...newProduct, packedStock: Number(e.target.value) })}
+                onChange={(e) =>
+                  setNewProduct({
+                    ...newProduct,
+                    packedStock: Number(e.target.value),
+                  })
+                }
                 className="col-span-3"
               />
             </div>
@@ -138,7 +197,29 @@ export default function ProductsPage() {
                 id="packedSize"
                 type="number"
                 value={newProduct.packedSize}
-                onChange={(e) => setNewProduct({ ...newProduct, packedSize: Number(e.target.value) })}
+                onChange={(e) =>
+                  setNewProduct({
+                    ...newProduct,
+                    packedSize: Number(e.target.value),
+                  })
+                }
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="price" className="text-right">
+                Price (per unit)
+              </Label>
+              <Input
+                id="price"
+                type="number"
+                value={newProduct.price}
+                onChange={(e) =>
+                  setNewProduct({
+                    ...newProduct,
+                    price: Number(e.target.value),
+                  })
+                }
                 className="col-span-3"
               />
             </div>
@@ -155,6 +236,7 @@ export default function ProductsPage() {
             <TableHead>Unpacked Stock</TableHead>
             <TableHead>Packed Stock</TableHead>
             <TableHead>Packed Size</TableHead>
+            <TableHead>Price(per unit)</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -167,8 +249,13 @@ export default function ProductsPage() {
               <TableCell>{product.unpackedStock}</TableCell>
               <TableCell>{product.packedStock}</TableCell>
               <TableCell>{product.packedSize}g</TableCell>
+              <TableCell>{product.price} PKR</TableCell>
               <TableCell>
-                <Button variant="outline" size="sm" onClick={() => deleteProduct(product.id)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => deleteProduct(product.id)}
+                >
                   Delete
                 </Button>
               </TableCell>
@@ -177,6 +264,5 @@ export default function ProductsPage() {
         </TableBody>
       </Table>
     </div>
-  )
+  );
 }
-
