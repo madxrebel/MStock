@@ -7,7 +7,7 @@ import {
   onSnapshot,
   addDoc,
 } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase"; // Ensure `auth` is imported to get the current user
+import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,11 +42,11 @@ type Product = {
 type SelectedItem = {
   id: string;
   name: string;
-  price: number; // Price of the product
-  unitAmount: number; // Number of items taken
-  total: number; // Total = unitAmount * product price
-  sold: number; // Default = 0
-  returned: number; // Default = 0
+  price: number;
+  unitAmount: number;
+  total: number;
+  sold: number;
+  returned: number;
 };
 
 export default function NewTransactionPage() {
@@ -56,16 +56,16 @@ export default function NewTransactionPage() {
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [unitAmount, setUnitAmount] = useState<number>(1);
-  const [currentUser, setCurrentUser] = useState<string | null>(null); // Tracks the logged-in user
-  const [totalTransactionPrice, setTotalTransactionPrice] = useState<number>(0); // Total price of the transaction
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [totalTransactionPrice, setTotalTransactionPrice] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false); // Loading state
 
-  // Fetch authenticated user
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        setCurrentUser(user.uid); // Store the user's unique ID
+        setCurrentUser(user.uid);
       } else {
-        setCurrentUser(null); // Clear user data if logged out
+        setCurrentUser(null);
       }
     });
 
@@ -102,47 +102,56 @@ export default function NewTransactionPage() {
     const newItem: SelectedItem = {
       id: selectedProduct.id,
       name: selectedProduct.name,
-      price: unitAmount * selectedProduct.price, // Include price for display
+      price: unitAmount * selectedProduct.price,
       unitAmount,
       total: unitAmount,
-      sold: 0, // Default value
-      returned: 0, // Default value
+      sold: 0,
+      returned: 0,
     };
     setSelectedItems([...selectedItems, newItem]);
-    setTotalTransactionPrice(
-      (prevTotal) => prevTotal + newItem.price
-    ); // Update total transaction price
-    setSelectedProduct(null); // Reset product selection
-    setUnitAmount(1); // Reset unit amount
+    setTotalTransactionPrice((prevTotal) => prevTotal + newItem.price);
+    setSelectedProduct(null);
+    setUnitAmount(1);
   };
 
   const handleTransaction = async () => {
     if (!selectedSupplier || selectedItems.length === 0 || !currentUser) {
-      alert("Please select a supplier, add items to the transaction, and ensure you're logged in.");
+      alert("Please select a supplier, add items, and ensure you're logged in.");
       return;
     }
-    await addDoc(collection(db, "transactions"), {
-      supplierId: selectedSupplier,
-      items: selectedItems,
-      totalTransactionPrice, // Save the total transaction price
-      userRef: currentUser, // Reference the logged-in user
-      timestamp: new Date(),
-    });
-    setSelectedSupplier(null);
-    setSelectedItems([]);
-    setTotalTransactionPrice(0); // Reset total transaction price
-    alert("Transaction successful.");
+
+    setLoading(true); // Set loading state
+    try {
+      await addDoc(collection(db, "transactions"), {
+        supplierId: selectedSupplier,
+        items: selectedItems,
+        totalTransactionPrice,
+        userRef: currentUser,
+        timestamp: new Date(),
+      });
+      setSelectedSupplier(null);
+      setSelectedItems([]);
+      setTotalTransactionPrice(0);
+      alert("Transaction successful.");
+    } catch (error) {
+      console.error("Error during transaction:", error);
+      alert("Transaction failed.");
+    } finally {
+      setLoading(false); // Reset loading state
+    }
   };
 
   const cancelTransaction = () => {
     setSelectedSupplier(null);
     setSelectedItems([]);
-    setTotalTransactionPrice(0); // Reset total transaction price
+    setTotalTransactionPrice(0);
   };
 
   return (
     <div className="container mx-auto py-10">
       <h1 className="text-2xl font-bold mb-5">New Transaction</h1>
+      {loading && <p className="text-center text-gray-500">Loading...</p>}
+
       <div className="mb-5">
         <Label htmlFor="supplier">Select Supplier</Label>
         <Input
@@ -234,17 +243,19 @@ export default function NewTransactionPage() {
         </Table>
       )}
 
-        {totalTransactionPrice > 0 && (
+      {totalTransactionPrice > 0 && (
         <div className="mt-5">
-            <p className="text-lg font-semibold">
+          <p className="text-lg font-semibold">
             Total Transaction Price: {totalTransactionPrice.toLocaleString("en-PK")} PKR
-            </p>
+          </p>
         </div>
-        )}
+      )}
 
       <div className="flex gap-4 mt-5">
-        <Button onClick={handleTransaction}>Make Transaction</Button>
-        <Button variant="outline" onClick={cancelTransaction}>
+        <Button onClick={handleTransaction} disabled={loading}>
+          {loading ? "Processing..." : "Make Transaction"}
+        </Button>
+        <Button variant="outline" onClick={cancelTransaction} disabled={loading}>
           Cancel Transaction
         </Button>
       </div>

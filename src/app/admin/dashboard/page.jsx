@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, updateDoc, doc, setDoc } from "firebase/firestore";
+import { collection, getDocs, updateDoc, doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -57,14 +57,34 @@ export default function AdminDashboard() {
         };
       
         const fetchTransactions = async () => {
-          const transactionsSnapshot = await getDocs(collection(db, "transactions"));
-          const transactionsData = transactionsSnapshot.docs
-            .map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            }))
-            .sort((a, b) => b.createdAt - a.createdAt);
-          setTransactions(transactionsData.slice(0, 10)); // Top 10 transactions
+            try {
+              const transactionsSnapshot = await getDocs(collection(db, "transactions"));
+              const transactionsData = await Promise.all(
+                transactionsSnapshot.docs.map(async (docSnapshot) => {
+                  const transaction = { id: docSnapshot.id, ...docSnapshot.data() };
+          
+                  // Fetch supplier name
+                  if (transaction.supplierId) {
+                    const supplierDocRef = doc(db, "suppliers", transaction.supplierId); // Create a document reference
+                    const supplierDoc = await getDoc(supplierDocRef); // Fetch the document data
+                    transaction.supplierName = supplierDoc.exists() ? supplierDoc.data().name : "Unknown Supplier";
+                  } else {
+                    transaction.supplierName = "Unknown Supplier";
+                  }
+          
+                  return transaction;
+                })
+              );
+          
+              // Sort by createdAt and limit to top 10
+              const sortedTransactions = transactionsData
+                .sort((a, b) => b.createdAt - a.createdAt)
+                .slice(0, 10);
+          
+              setTransactions(sortedTransactions);
+            } catch (error) {
+              console.error("Error fetching transactions:", error);
+            }
         };
       
         Promise.all([fetchProducts(), fetchSuppliers(), fetchTransactions()]).finally(() => {
@@ -149,7 +169,11 @@ export default function AdminDashboard() {
     };
 
     if (loading) {
-        return <div>Loading...</div>; // Show a loading indicator
+        return (
+          <div className="flex h-screen bg-gray-100 items-center justify-center">
+            <div className="text-2xl font-bold text-gray-600">Loading...</div>
+          </div>
+        );
     }
 
     return (
@@ -166,14 +190,11 @@ export default function AdminDashboard() {
                     <a href="/products" className="block px-4 py-2 hover:bg-gray-700 rounded">
                         Products
                     </a>
-                    <a href="#suppliers" className="block px-4 py-2 hover:bg-gray-700 rounded">
+                    <a href="/suppliers" className="block px-4 py-2 hover:bg-gray-700 rounded">
                         Suppliers
                     </a>
-                    <a href="#transactions" className="block px-4 py-2 hover:bg-gray-700 rounded">
+                    <a href="/transactions" className="block px-4 py-2 hover:bg-gray-700 rounded">
                         Transactions
-                    </a>
-                    <a href="#reports" className="block px-4 py-2 hover:bg-gray-700 rounded">
-                        Reports
                     </a>
                 </nav>
             </aside>
@@ -211,40 +232,50 @@ export default function AdminDashboard() {
                 {/* Content */}
                 <main className="flex-1 p-6">
                     
-                    <section id="transactions" className="mb-6">
-                        <h2 className="text-2xl font-bold mb-4 flex items-center justify-between">
-                            Latest Transactions
+                <section id="transactions" className="mb-6">
+                    <h2 className="text-2xl font-bold mb-4 flex items-center justify-between">
+                        Latest Transactions
+                        <div>
                             <button
-                                onClick={() => router.push("/transactions")}
-                                className="bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600"
+                            onClick={() => router.push("/new-transaction")}
+                            className="bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600"
                             >
-                                More
+                            New
                             </button>
-                        </h2>
-                        <div className="bg-white p-4 rounded-lg shadow-md">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr>
-                                        <th className="border-b px-4 py-2">Transaction ID</th>
-                                        <th className="border-b px-4 py-2">Supplier</th>
-                                        <th className="border-b px-4 py-2">Amount (PKR)</th>
-                                        <th className="border-b px-4 py-2">Date</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {transactions.map((transaction) => (
-                                        <tr key={transaction.id}>
-                                            <td className="border-b px-4 py-2">{transaction.id}</td>
-                                            <td className="border-b px-4 py-2">{transaction.supplierId}</td>
-                                            <td className="border-b px-4 py-2">{transaction.totalTransactionPrice}</td>
-                                            <td className="border-b px-4 py-2">
-                                                {new Date(transaction.timestamp.seconds * 1000).toLocaleDateString()}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                            <button
+                            onClick={() => router.push("/transactions")}
+                            className="bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600"
+                            >
+                            More
+                            </button>
                         </div>
+                    </h2>
+                    <div className="bg-white p-4 rounded-lg shadow-md">
+                        <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr>
+                            <th className="border-b px-4 py-2">Transaction ID</th>
+                            <th className="border-b px-4 py-2">Supplier ID</th>
+                            <th className="border-b px-4 py-2">Supplier Name</th>
+                            <th className="border-b px-4 py-2">Amount (PKR)</th>
+                            <th className="border-b px-4 py-2">Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {transactions.map((transaction) => (
+                            <tr key={transaction.id}>
+                                <td className="border-b px-4 py-2">{transaction.id}</td>
+                                <td className="border-b px-4 py-2">{transaction.supplierId}</td>
+                                <td className="border-b px-4 py-2">{transaction.supplierName}</td>
+                                <td className="border-b px-4 py-2">{transaction.totalTransactionPrice}</td>
+                                <td className="border-b px-4 py-2">
+                                {new Date(transaction.timestamp.seconds * 1000).toLocaleDateString()}
+                                </td>
+                            </tr>
+                            ))}
+                        </tbody>
+                        </table>
+                    </div>
                     </section>
 
                     {/* Modal */}
@@ -387,7 +418,7 @@ export default function AdminDashboard() {
                         </div>
                     )}
 
-<section id="stock" className="mb-6">
+                    <section id="stock" className="mb-6">
                         <h2 className="text-2xl font-bold mb-4">Stock Overview</h2>
                         <div className="bg-white p-4 rounded-lg shadow-md">
                             <table className="w-full text-left border-collapse">

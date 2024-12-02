@@ -10,7 +10,7 @@ export default function HomePage() {
       </p>
       <div className="flex space-x-4">
         <Button asChild>
-          <Link href="/dashboard">Go to Dashboard</Link>
+          <Link href="/admin/dashboard">Go to Dashboard</Link>
         </Button>
         <Button asChild variant="outline">
           <Link href="/products">Manage Products</Link>
