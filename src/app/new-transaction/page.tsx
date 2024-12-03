@@ -36,15 +36,14 @@ type Supplier = {
 type Product = {
   id: string;
   name: string;
-  price: number;
+  price: number; // Per unit price
 };
 
 type SelectedItem = {
   id: string;
   name: string;
-  price: number;
+  price: number; // Per unit price
   unitAmount: number;
-  total: number;
   sold: number;
   returned: number;
 };
@@ -57,8 +56,13 @@ export default function NewTransactionPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [unitAmount, setUnitAmount] = useState<number>(1);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
-  const [totalTransactionPrice, setTotalTransactionPrice] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(false); // Loading state
+  const [loading, setLoading] = useState<boolean>(false);
+
+  // Calculate total transaction price dynamically
+  const totalTransactionPrice = selectedItems.reduce(
+    (total, item) => total + item.price * item.unitAmount,
+    0
+  );
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -102,14 +106,12 @@ export default function NewTransactionPage() {
     const newItem: SelectedItem = {
       id: selectedProduct.id,
       name: selectedProduct.name,
-      price: unitAmount * selectedProduct.price,
+      price: selectedProduct.price, // Store per-unit price
       unitAmount,
-      total: unitAmount,
       sold: 0,
       returned: 0,
     };
     setSelectedItems([...selectedItems, newItem]);
-    setTotalTransactionPrice((prevTotal) => prevTotal + newItem.price);
     setSelectedProduct(null);
     setUnitAmount(1);
   };
@@ -120,7 +122,7 @@ export default function NewTransactionPage() {
       return;
     }
 
-    setLoading(true); // Set loading state
+    setLoading(true);
     try {
       await addDoc(collection(db, "transactions"), {
         supplierId: selectedSupplier,
@@ -131,20 +133,18 @@ export default function NewTransactionPage() {
       });
       setSelectedSupplier(null);
       setSelectedItems([]);
-      setTotalTransactionPrice(0);
       alert("Transaction successful.");
     } catch (error) {
       console.error("Error during transaction:", error);
       alert("Transaction failed.");
     } finally {
-      setLoading(false); // Reset loading state
+      setLoading(false);
     }
   };
 
   const cancelTransaction = () => {
     setSelectedSupplier(null);
     setSelectedItems([]);
-    setTotalTransactionPrice(0);
   };
 
   return (
@@ -223,20 +223,24 @@ export default function NewTransactionPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Item Name</TableHead>
-              <TableHead>Total</TableHead>
+              <TableHead>Total Units</TableHead>
               <TableHead>Sold</TableHead>
               <TableHead>Returned</TableHead>
-              <TableHead>Price</TableHead>
+              <TableHead>Unit Price</TableHead>
+              <TableHead>Total Price</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {selectedItems.map((item, index) => (
               <TableRow key={index}>
                 <TableCell>{item.name}</TableCell>
-                <TableCell>{item.total}</TableCell>
+                <TableCell>{item.unitAmount}</TableCell>
                 <TableCell>{item.sold}</TableCell>
                 <TableCell>{item.returned}</TableCell>
-                <TableCell>{item.price}</TableCell>
+                <TableCell>{item.price.toLocaleString("en-PK")} PKR</TableCell>
+                <TableCell>
+                  {(item.price * item.unitAmount).toLocaleString("en-PK")} PKR
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 
-
 const TransactionDetail = () => {
   const params = useParams();
   const { id } = params;
@@ -42,7 +41,7 @@ const TransactionDetail = () => {
         if (transactionData.items && Array.isArray(transactionData.items)) {
           const resolvedProducts = transactionData.items.map(item => ({
             ...item,
-            remaining: item.total - item.sold - item.returned, // Initial remaining calculation
+            remaining: item.unitAmount - item.sold - item.returned, // Updated to use unitAmount
             hasError: false, // Track field error state
             hasBeenEdited: item.hasBeenEdited || false, // Fetch editable status from the database
           }));
@@ -65,21 +64,21 @@ const TransactionDetail = () => {
     // Update field value
     let newValue = parseInt(value) || 0;
 
-    // Validate against total quantity
-    if (newValue > product.total) {
+    // Validate against unitAmount
+    if (newValue > product.unitAmount) {
       product.hasError = true; // Set error flag
-      newValue = product.total; // Limit value to total
+      newValue = product.unitAmount; // Limit value to unitAmount
     } else {
       product.hasError = false; // Clear error flag
     }
 
     product[field] = newValue;
 
-    // Recalculate dependent field
+    // Recalculate dependent field based on changes to sold or returned
     if (field === "sold") {
-      product.returned = product.total - product.sold;
+      product.returned = product.unitAmount - product.sold;
     } else if (field === "returned") {
-      product.sold = product.total - product.returned;
+      product.sold = product.unitAmount - product.returned;
     }
 
     setProducts(updatedProducts);
@@ -87,21 +86,30 @@ const TransactionDetail = () => {
 
   const handleSave = async () => {
     try {
+      // Calculate totalSoldPrice
+      const totalSoldPrice = products.reduce((total, product) => {
+        return total + (product.price * product.sold);
+      }, 0);
+  
+      // Prepare the updated items with the changes
       const updatedItems = products.map((product) => ({
         id: product.id,
         name: product.name,
         price: product.price,
         sold: product.sold,
         returned: product.returned,
-        total: product.total,
         unitAmount: product.unitAmount,
         hasBeenEdited: true, // Mark as edited after saving
       }));
-
-      // Update the transaction in Firestore
-      await updateDoc(doc(db, "transactions", id), { items: updatedItems });
+  
+      // Update the transaction in Firestore with totalSoldPrice
+      await updateDoc(doc(db, "transactions", id), {
+        items: updatedItems,
+        totalSoldPrice: totalSoldPrice, // Add the totalSoldPrice field
+      });
+  
       alert("Transaction updated successfully!");
-
+  
       // Update local state to reflect saved changes
       const updatedProducts = products.map((product) => ({
         ...product,
@@ -123,10 +131,10 @@ const TransactionDetail = () => {
       <h1 className="text-2xl font-bold mb-4 flex justify-between items-center">
         Transaction Details
         <button
-            onClick={() => router.push("/admin/dashboard")}
-            className="bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600"
-            >
-            Back to dashboard
+          onClick={() => router.push("/admin/dashboard")}
+          className="bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600"
+        >
+          Back to dashboard
         </button>
       </h1>
 
@@ -135,6 +143,7 @@ const TransactionDetail = () => {
         <h2 className="text-xl font-semibold mb-2">Transaction Information</h2>
         <p><strong>Transaction ID:</strong> {transaction.id}</p>
         <p><strong>Total Amount:</strong> {transaction.totalTransactionPrice} PKR</p>
+        <p><strong>Total Sold Price:</strong> {transaction.totalSoldPrice} PKR</p> {/* New field */}
         <p><strong>Date:</strong> {new Date(transaction.timestamp.seconds * 1000).toLocaleDateString()}</p>
       </div>
 
@@ -159,7 +168,7 @@ const TransactionDetail = () => {
             <thead className="border-b">
               <tr>
                 <th className="px-4 py-2 text-left">Item</th>
-                <th className="px-4 py-2 text-left">Total</th>
+                <th className="px-4 py-2 text-left">Unit Amount</th>
                 <th className="px-4 py-2 text-left">Sold</th>
                 <th className="px-4 py-2 text-left">Returned</th>
                 <th className="px-4 py-2 text-left">Price</th>
@@ -169,7 +178,7 @@ const TransactionDetail = () => {
               {products.map((product, index) => (
                 <tr key={product.id} className="border-b">
                   <td className="px-4 py-2">{product.name}</td>
-                  <td className="px-4 py-2">{product.total}</td>
+                  <td className="px-4 py-2">{product.unitAmount}</td>
                   <td className="px-4 py-2">
                     {product.hasBeenEdited ? (
                       <span>{product.sold}</span>
@@ -194,7 +203,7 @@ const TransactionDetail = () => {
                       />
                     )}
                   </td>
-                  <td className="px-4 py-2">{product.price}</td>
+                  <td className="px-4 py-2">{product.price * product.sold}</td>
                 </tr>
               ))}
             </tbody>
