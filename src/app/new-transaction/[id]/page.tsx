@@ -4,11 +4,15 @@ import { useState, useEffect } from "react";
 import {
   collection,
   query,
+  where,
   onSnapshot,
-  addDoc,
+  doc,
+  increment,
+  writeBatch
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +41,7 @@ type Product = {
   id: string;
   name: string;
   price: number; // Per unit price
+  packedStock: number; // Current stock
 };
 
 type SelectedItem = {
@@ -58,6 +63,9 @@ export default function NewTransactionPage() {
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
+  const router = useRouter();
+  const { id } = useParams(); // Get the dynamic route parameter
+
   // Calculate total transaction price dynamically
   const totalTransactionPrice = selectedItems.reduce(
     (total, item) => total + item.price * item.unitAmount,
@@ -70,6 +78,8 @@ export default function NewTransactionPage() {
         setCurrentUser(user.uid);
       } else {
         setCurrentUser(null);
+        router.push("/login");
+        return;
       }
     });
 
@@ -77,7 +87,12 @@ export default function NewTransactionPage() {
   }, []);
 
   useEffect(() => {
-    const fetchSuppliers = query(collection(db, "suppliers"));
+    if (!id) return;
+
+    const fetchSuppliers = query(
+      collection(db, "suppliers"),
+      where("createdBy", "==", id)
+    );
     const unsubscribeSuppliers = onSnapshot(fetchSuppliers, (snapshot) => {
       const suppliersArray: Supplier[] = [];
       snapshot.forEach((doc) => {
@@ -86,11 +101,20 @@ export default function NewTransactionPage() {
       setSuppliers(suppliersArray);
     });
 
-    const fetchProducts = query(collection(db, "products"));
+    const fetchProducts = query(
+      collection(db, "products"),
+      where("createdBy", "==", id)
+    );
     const unsubscribeProducts = onSnapshot(fetchProducts, (snapshot) => {
       const productsArray: Product[] = [];
       snapshot.forEach((doc) => {
-        productsArray.push({ id: doc.id, ...doc.data() } as Product);
+        const productData = doc.data();
+        productsArray.push({
+          id: doc.id,
+          name: productData.name,
+          price: productData.price,
+          packedStock: productData.packedStock, // Include current stock
+        } as Product);
       });
       setProducts(productsArray);
     });
@@ -99,19 +123,52 @@ export default function NewTransactionPage() {
       unsubscribeSuppliers();
       unsubscribeProducts();
     };
-  }, []);
+  }, [id]);
 
   const addItemToTransaction = () => {
-    if (!selectedProduct || unitAmount <= 0) return;
-    const newItem: SelectedItem = {
-      id: selectedProduct.id,
-      name: selectedProduct.name,
-      price: selectedProduct.price, // Store per-unit price
-      unitAmount,
-      sold: 0,
-      returned: 0,
-    };
-    setSelectedItems([...selectedItems, newItem]);
+    if (!selectedProduct || unitAmount <= 0) {
+      alert("Please select a product and specify a valid unit amount.");
+      return;
+    }
+  
+    // Check if the unit amount exceeds the available stock
+    if (unitAmount > selectedProduct.packedStock) {
+      alert(`Error: Stock is insufficient. Available stock: ${selectedProduct.packedStock}`);
+      return;
+    }
+  
+    // Check if the product is already in the selectedItems list
+    const existingItemIndex = selectedItems.findIndex(
+      (item) => item.id === selectedProduct.id
+    );
+  
+    if (existingItemIndex !== -1) {
+      // Update the unit amount of the existing item
+      const updatedItems = [...selectedItems];
+      const totalUnits = updatedItems[existingItemIndex].unitAmount + unitAmount;
+  
+      if (totalUnits > selectedProduct.packedStock) {
+        alert(
+          `Error: Total requested units exceed available stock. Available stock: ${selectedProduct.packedStock}`
+        );
+        return;
+      }
+  
+      updatedItems[existingItemIndex].unitAmount = totalUnits;
+      setSelectedItems(updatedItems);
+    } else {
+      // Add the new item to the list
+      const newItem: SelectedItem = {
+        id: selectedProduct.id,
+        name: selectedProduct.name,
+        price: selectedProduct.price,
+        unitAmount,
+        sold: 0,
+        returned: 0,
+      };
+      setSelectedItems([...selectedItems, newItem]);
+    }
+  
     setSelectedProduct(null);
     setUnitAmount(1);
   };
@@ -121,16 +178,35 @@ export default function NewTransactionPage() {
       alert("Please select a supplier, add items, and ensure you're logged in.");
       return;
     }
-
+  
     setLoading(true);
     try {
-      await addDoc(collection(db, "transactions"), {
+      // Initialize Firestore batch
+      const batch = writeBatch(db);
+  
+      // Add the transaction to the "transactions" collection
+      const transactionRef = collection(db, "transactions");
+      const newTransactionRef = doc(transactionRef);
+  
+      batch.set(newTransactionRef, {
         supplierId: selectedSupplier,
         items: selectedItems,
         totalTransactionPrice,
-        userRef: currentUser,
+        createdBy: currentUser,
         timestamp: new Date(),
       });
+  
+      // Update the packedStock for each product in the transaction
+      selectedItems.forEach((item) => {
+        const productRef = doc(db, "products", item.id);
+        batch.update(productRef, {
+          packedStock: increment(-item.unitAmount),
+        });
+      });
+  
+      // Commit the batch
+      await batch.commit();
+  
       setSelectedSupplier(null);
       setSelectedItems([]);
       alert("Transaction successful.");
@@ -187,7 +263,7 @@ export default function NewTransactionPage() {
             <datalist id="products">
               {products.map((product) => (
                 <option key={product.id} value={product.id}>
-                  {product.name}
+                  {product.name} (Stock: {product.packedStock})
                 </option>
               ))}
             </datalist>
