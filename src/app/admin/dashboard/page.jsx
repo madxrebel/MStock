@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, updateDoc, doc, setDoc, getDoc } from "firebase/firestore";
+import { collection, getDocs, updateDoc, doc, setDoc, getDoc, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -37,10 +37,12 @@ export default function AdminDashboard() {
         }
     }, [user, router]);
 
-    // Fetch products, transactions and suppliers
     useEffect(() => {
+        if (!user) return; // Ensure user is available before fetching data
+      
         const fetchProducts = async () => {
-          const productsSnapshot = await getDocs(collection(db, "products"));
+          const productsQuery = query(collection(db, "products"), where("createdBy", "==", user.uid));
+          const productsSnapshot = await getDocs(productsQuery);
           const productsData = productsSnapshot.docs.map((doc) => ({
             id: doc.id,
             ...doc.data(),
@@ -50,7 +52,8 @@ export default function AdminDashboard() {
         };
       
         const fetchSuppliers = async () => {
-          const suppliersSnapshot = await getDocs(collection(db, "suppliers"));
+          const suppliersQuery = query(collection(db, "suppliers"), where("createdBy", "==", user.uid));
+          const suppliersSnapshot = await getDocs(suppliersQuery);
           const suppliersData = suppliersSnapshot.docs.map((doc) => ({
             id: doc.id,
             ...doc.data(),
@@ -59,40 +62,41 @@ export default function AdminDashboard() {
         };
       
         const fetchTransactions = async () => {
-            try {
-              const transactionsSnapshot = await getDocs(collection(db, "transactions"));
-              const transactionsData = await Promise.all(
-                transactionsSnapshot.docs.map(async (docSnapshot) => {
-                  const transaction = { id: docSnapshot.id, ...docSnapshot.data() };
-          
-                  // Fetch supplier name
-                  if (transaction.supplierId) {
-                    const supplierDocRef = doc(db, "suppliers", transaction.supplierId); // Create a document reference
-                    const supplierDoc = await getDoc(supplierDocRef); // Fetch the document data
-                    transaction.supplierName = supplierDoc.exists() ? supplierDoc.data().name : "Unknown Supplier";
-                  } else {
-                    transaction.supplierName = "Unknown Supplier";
-                  }
-          
-                  return transaction;
-                })
-              );
-          
-              // Sort by createdAt and limit to top 10
-              const sortedTransactions = transactionsData
-                .sort((a, b) => b.createdAt - a.createdAt)
-                .slice(0, 10);
-          
-              setTransactions(sortedTransactions);
-            } catch (error) {
-              console.error("Error fetching transactions:", error);
-            }
+          try {
+            const transactionsQuery = query(collection(db, "transactions"), where("createdBy", "==", user.uid));
+            const transactionsSnapshot = await getDocs(transactionsQuery);
+            const transactionsData = await Promise.all(
+              transactionsSnapshot.docs.map(async (docSnapshot) => {
+                const transaction = { id: docSnapshot.id, ...docSnapshot.data() };
+      
+                // Fetch supplier name
+                if (transaction.supplierId) {
+                  const supplierDocRef = doc(db, "suppliers", transaction.supplierId); // Create a document reference
+                  const supplierDoc = await getDoc(supplierDocRef); // Fetch the document data
+                  transaction.supplierName = supplierDoc.exists() ? supplierDoc.data().name : "Unknown Supplier";
+                } else {
+                  transaction.supplierName = "Unknown Supplier";
+                }
+      
+                return transaction;
+              })
+            );
+      
+            // Sort by createdAt and limit to top 10
+            const sortedTransactions = transactionsData
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .slice(0, 10);
+      
+            setTransactions(sortedTransactions);
+          } catch (error) {
+            console.error("Error fetching transactions:", error);
+          }
         };
       
         Promise.all([fetchProducts(), fetchSuppliers(), fetchTransactions()]).finally(() => {
-          setLoading(false);  // Set loading to false after data fetching completes
+          setLoading(false); // Set loading to false after data fetching completes
         });
-    }, []);
+    }, [db, user]);
 
     const openModal = (id, currentStock, actionType) => {
         setProductId(id);
@@ -161,7 +165,7 @@ export default function AdminDashboard() {
     // Handle logout
     const handleLogout = async () => {
         await signOut(auth);
-        router.push("/admin/register");
+        router.push("/login");
     };
 
     // Handle stock update in modal

@@ -11,7 +11,7 @@ const Transactions = ({ transactions, router, uid }) => {
                     New
                     </button>
                     <button
-                    onClick={() => router.push("/transactions")}
+                    onClick={() => router.push(`/transactions?uid=${uid}`)}
                     className="bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600"
                     >
                     More
