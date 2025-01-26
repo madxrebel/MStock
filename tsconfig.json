@@ -22,6 +22,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/app/dashboard/layout.jsx"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/app/dashboard/layout.jsx", "src/app/new-transaction/[id]/page.jsx", "src/components/AddCustomerForm.jsx", "src/components/CustomerList.jsx", "src/components/auth-provider.jsx", "src/components/CustomersTable.jsx", "src/app/suppliers/dashboard/[id]/page.jsx", "src/components/TopProductsChart.jsx"],
   "exclude": ["node_modules"]
 }

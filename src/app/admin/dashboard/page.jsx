@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { collection, getDocs, updateDoc, doc, setDoc, getDoc, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import { signOut } from "firebase/auth";
+import { multiFactor, signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { Transactions, Suppliers, Products } from "@/sections"
 import { Model, Header, Sidebar } from "@/components"
@@ -48,8 +48,11 @@ export default function AdminDashboard() {
             ...doc.data(),
           }));
           const sortedProducts = productsData.sort((a, b) => a.packedStock - b.packedStock);
+          console.log(sortedProducts)
           setProducts(sortedProducts);
         };
+
+        console.log(products)
       
         const fetchSuppliers = async () => {
           const suppliersQuery = query(collection(db, "suppliers"), where("createdBy", "==", user.uid));
@@ -98,6 +101,11 @@ export default function AdminDashboard() {
         });
     }, [db, user]);
 
+    // Monitor `products` state changes
+useEffect(() => {
+    console.log("Updated products:", products);
+}, [products]);
+
     const openModal = (id, currentStock, actionType) => {
         setProductId(id);
         setStockChange(0);
@@ -112,14 +120,14 @@ export default function AdminDashboard() {
         if (product) {
             let newStock;
             if (action === "add") {
-                newStock = Math.max(0, product.packedStock + change);
+                newStock = Math.max(0, product.stockMultiplier + change);
             } else if (action === "subtract") {
-                newStock = Math.max(0, product.packedStock - change);  // Subtract logic
+                newStock = Math.max(0, product.stockMultiplier - change);  // Subtract logic
             }
-            await updateDoc(productRef, { packedStock: newStock });
+            await updateDoc(productRef, { stockMultiplier: newStock });
             setProducts((prev) =>
                 prev.map((p) =>
-                    p.id === productId ? { ...p, packedStock: newStock } : p
+                    p.id === productId ? { ...p, stockMultiplier: newStock } : p
                 )
             );
         }
@@ -138,19 +146,25 @@ export default function AdminDashboard() {
             // Create a supplier reference using newSupplierId
             const supplierRef = doc(db, "suppliers", newSupplierId);
     
-            // Set the supplier data using the newSupplier state (excluding the ID)
+            // Set the supplier data using the newSupplier state (including isWorking)
             await setDoc(supplierRef, {
                 name: newSupplier.name,
                 password: newSupplier.password,
                 phone: newSupplier.phone,
                 cnic: newSupplier.cnic,
+                isWorking: true,  // Adding the new field with default value true
                 createdBy: user.uid, 
             });
     
             // Update the suppliers list in the state with the new supplier details
             setSuppliers((prev) => [
                 ...prev,
-                { ...newSupplier, id: newSupplierId, createdBy: user.uid,  }, // Add the ID back to the supplier object
+                { 
+                    ...newSupplier, 
+                    id: newSupplierId, 
+                    createdBy: user.uid, 
+                    isWorking: true  // Add isWorking to the state object as well
+                },
             ]);
     
             // Clear the input fields and reset modal state
@@ -203,7 +217,7 @@ export default function AdminDashboard() {
                     <Model isModalOpen={isModalOpen} setIsModalOpen={() => setIsModalOpen(false)} handleUpdateStock={handleUpdateStock} setStockChange={(e) => setStockChange(Number(e.target.value))} stockChange={stockChange} />
 
                     {/* Suppliers Section */}
-                    <Suppliers suppliers={suppliers} setIsSupplierModalOpen={() => setIsSupplierModalOpen(true)}/>
+                    <Suppliers suppliers={suppliers} setIsSupplierModalOpen={() => setIsSupplierModalOpen(true)} uid={user.uid} router={router} />
 
                     {/* Add Supplier Modal */}
                     {isSupplierModalOpen && (
@@ -278,7 +292,19 @@ export default function AdminDashboard() {
                     )}
                     
                     {/* Products Section */}
-                    <Products products={products} openModal={openModal} router={router} uid={user.uid} />
+                    <section id="stock" className="mb-6">
+                        <h2 className="text-2xl font-bold mb-4 flex justify-between items-center">
+                            Stock Overview
+                            <button
+                            onClick={() => router.push(`/products/${user.uid}`)}
+                            className="bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600"
+                            >
+                            +
+                            </button>
+                        </h2>
+                        {products.length > 0 && <Products products={products} openModal={openModal} router={router} uid={user.uid} />}
+                    </section>
+                    
                     
                 </main>
             </div>

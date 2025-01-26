@@ -84,43 +84,6 @@ const TransactionDetail = () => {
     setProducts(updatedProducts);
   };
 
-  const handleSave = async () => {
-    try {
-      // Calculate totalSoldPrice
-      const totalSoldPrice = products.reduce((total, product) => {
-        return total + (product.price * product.sold);
-      }, 0);
-  
-      // Prepare the updated items with the changes
-      const updatedItems = products.map((product) => ({
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        sold: product.sold,
-        returned: product.returned,
-        unitAmount: product.unitAmount,
-        hasBeenEdited: true, // Mark as edited after saving
-      }));
-  
-      // Update the transaction in Firestore with totalSoldPrice
-      await updateDoc(doc(db, "transactions", id), {
-        items: updatedItems,
-        totalSoldPrice: totalSoldPrice, // Add the totalSoldPrice field
-      });
-  
-      alert("Transaction updated successfully!");
-  
-      // Update local state to reflect saved changes
-      const updatedProducts = products.map((product) => ({
-        ...product,
-        hasBeenEdited: true, // Lock fields after successful save
-      }));
-      setProducts(updatedProducts);
-    } catch (error) {
-      console.error("Error saving transaction:", error);
-    }
-  };
-
   if (loading) return <div>Loading transaction details...</div>;
   if (!transaction) return <div>Transaction not found.</div>;
 
@@ -168,42 +131,16 @@ const TransactionDetail = () => {
             <thead className="border-b">
               <tr>
                 <th className="px-4 py-2 text-left">Item</th>
-                <th className="px-4 py-2 text-left">Unit Amount</th>
-                <th className="px-4 py-2 text-left">Sold</th>
-                <th className="px-4 py-2 text-left">Returned</th>
+                <th className="px-4 py-2 text-left">Total Unit</th>
                 <th className="px-4 py-2 text-left">Price</th>
               </tr>
             </thead>
             <tbody>
-              {products.map((product, index) => (
+              {products.map((product) => (
                 <tr key={product.id} className="border-b">
-                  <td className="px-4 py-2">{product.name}</td>
+                  <td className="px-4 py-2">{product.productName}</td>
                   <td className="px-4 py-2">{product.unitAmount}</td>
-                  <td className="px-4 py-2">
-                    {product.hasBeenEdited ? (
-                      <span>{product.sold}</span>
-                    ) : (
-                      <input
-                        type="number"
-                        value={product.sold}
-                        onChange={(e) => handleProductChange(index, "sold", e.target.value)}
-                        className={`border px-2 py-1 rounded ${product.hasError && "border-red-500"}`}
-                      />
-                    )}
-                  </td>
-                  <td className="px-4 py-2">
-                    {product.hasBeenEdited ? (
-                      <span>{product.returned}</span>
-                    ) : (
-                      <input
-                        type="number"
-                        value={product.returned}
-                        onChange={(e) => handleProductChange(index, "returned", e.target.value)}
-                        className={`border px-2 py-1 rounded ${product.hasError && "border-red-500"}`}
-                      />
-                    )}
-                  </td>
-                  <td className="px-4 py-2">{product.price * product.sold}</td>
+                  <td className="px-4 py-2">{product.productPrice * product.unitAmount}</td>
                 </tr>
               ))}
             </tbody>
@@ -212,18 +149,6 @@ const TransactionDetail = () => {
           <p>No product information available.</p>
         )}
       </div>
-
-      {/* Save Button */}
-      {canEdit && (
-        <div className="mt-6">
-          <button
-            onClick={handleSave}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-          >
-            Save Changes
-          </button>
-        </div>
-      )}
     </div>
   );
 };

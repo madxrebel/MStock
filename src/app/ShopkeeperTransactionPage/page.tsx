@@ -32,31 +32,31 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-type Supplier = {
+type Shopkeeper = {
   id: string;
   name: string;
 };
 
 type Product = {
   id: string;
-  productName: string;
-  productPrice: number; // Per unit price
-  stockMultiplier: number; // Current stock
+  name: string;
+  price: number;
+  packedStock: number;
 };
 
 type SelectedItem = {
   id: string;
-  productName: string;
-  productPrice: number; // Per unit price
+  name: string;
+  price: number;
   unitAmount: number;
   sold: number;
   returned: number;
 };
 
-export default function NewTransactionPage() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+export default function ShopkeeperTransactionPage() {
+  const [shopkeepers, setShopkeepers] = useState<Shopkeeper[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
+  const [selectedShopkeeper, setSelectedShopkeeper] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [unitAmount, setUnitAmount] = useState<number>(1);
@@ -64,11 +64,11 @@ export default function NewTransactionPage() {
   const [loading, setLoading] = useState<boolean>(false);
 
   const router = useRouter();
-  const { id } = useParams(); // Get the dynamic route parameter
+  const { id } = useParams();
 
   // Calculate total transaction price dynamically
   const totalTransactionPrice = selectedItems.reduce(
-    (total, item) => total + item.productPrice * item.unitAmount,
+    (total, item) => total + item.price * item.unitAmount,
     0
   );
 
@@ -89,16 +89,16 @@ export default function NewTransactionPage() {
   useEffect(() => {
     if (!id) return;
 
-    const fetchSuppliers = query(
-      collection(db, "suppliers"),
+    const fetchShopkeepers = query(
+      collection(db, "shopkeepers"),
       where("createdBy", "==", id)
     );
-    const unsubscribeSuppliers = onSnapshot(fetchSuppliers, (snapshot) => {
-      const suppliersArray: Supplier[] = [];
+    const unsubscribeShopkeepers = onSnapshot(fetchShopkeepers, (snapshot) => {
+      const shopkeepersArray: Shopkeeper[] = [];
       snapshot.forEach((doc) => {
-        suppliersArray.push({ id: doc.id, ...doc.data() } as Supplier);
+        shopkeepersArray.push({ id: doc.id, ...doc.data() } as Shopkeeper);
       });
-      setSuppliers(suppliersArray);
+      setShopkeepers(shopkeepersArray);
     });
 
     const fetchProducts = query(
@@ -111,16 +111,16 @@ export default function NewTransactionPage() {
         const productData = doc.data();
         productsArray.push({
           id: doc.id,
-          productName: productData.productName,
-          productPrice: productData.productPrice,
-          stockMultiplier: productData.stockMultiplier, // Include current stock
+          name: productData.name,
+          price: productData.price,
+          packedStock: productData.packedStock,
         } as Product);
       });
       setProducts(productsArray);
     });
 
     return () => {
-      unsubscribeSuppliers();
+      unsubscribeShopkeepers();
       unsubscribeProducts();
     };
   }, [id]);
@@ -130,84 +130,74 @@ export default function NewTransactionPage() {
       alert("Please select a product and specify a valid unit amount.");
       return;
     }
-  
-    // Check if the unit amount exceeds the available stock
-    if (unitAmount > selectedProduct.stockMultiplier) {
-      alert(`Error: Stock is insufficient. Available stock: ${selectedProduct.stockMultiplier}`);
+
+    if (unitAmount > selectedProduct.packedStock) {
+      alert(`Error: Stock is insufficient. Available stock: ${selectedProduct.packedStock}`);
       return;
     }
-  
-    // Check if the product is already in the selectedItems list
+
     const existingItemIndex = selectedItems.findIndex(
       (item) => item.id === selectedProduct.id
     );
-  
+
     if (existingItemIndex !== -1) {
-      // Update the unit amount of the existing item
       const updatedItems = [...selectedItems];
       const totalUnits = updatedItems[existingItemIndex].unitAmount + unitAmount;
-  
-      if (totalUnits > selectedProduct.stockMultiplier) {
-        alert(
-          `Error: Total requested units exceed available stock. Available stock: ${selectedProduct.stockMultiplier}`
-        );
+
+      if (totalUnits > selectedProduct.packedStock) {
+        alert(`Error: Total requested units exceed available stock. Available stock: ${selectedProduct.packedStock}`);
         return;
       }
-  
+
       updatedItems[existingItemIndex].unitAmount = totalUnits;
       setSelectedItems(updatedItems);
     } else {
-      // Add the new item to the list
       const newItem: SelectedItem = {
         id: selectedProduct.id,
-        productName: selectedProduct.productName,
-        productPrice: selectedProduct.productPrice,
+        name: selectedProduct.name,
+        price: selectedProduct.price,
         unitAmount,
         sold: 0,
         returned: 0,
       };
       setSelectedItems([...selectedItems, newItem]);
     }
-  
+
     setSelectedProduct(null);
     setUnitAmount(1);
   };
 
   const handleTransaction = async () => {
-    if (!selectedSupplier || selectedItems.length === 0 || !currentUser) {
-      alert("Please select a supplier, add items, and ensure you're logged in.");
+    if (!selectedShopkeeper || selectedItems.length === 0 || !currentUser) {
+      alert("Please select a shopkeeper, add items, and ensure you're logged in.");
       return;
     }
-  
+
     setLoading(true);
     try {
-      // Initialize Firestore batch
       const batch = writeBatch(db);
-  
-      // Add the transaction to the "transactions" collection
+
       const transactionRef = collection(db, "transactions");
       const newTransactionRef = doc(transactionRef);
-  
+
       batch.set(newTransactionRef, {
-        supplierId: selectedSupplier,
+        shopkeeperId: selectedShopkeeper,
         items: selectedItems,
         totalTransactionPrice,
         createdBy: currentUser,
         timestamp: new Date(),
       });
-  
-      // Update the packedStock for each product in the transaction
+
       selectedItems.forEach((item) => {
         const productRef = doc(db, "products", item.id);
         batch.update(productRef, {
-          stockMultiplier: increment(-item.unitAmount),
+          packedStock: increment(-item.unitAmount),
         });
       });
-  
-      // Commit the batch
+
       await batch.commit();
-  
-      setSelectedSupplier(null);
+
+      setSelectedShopkeeper(null);
       setSelectedItems([]);
       alert("Transaction successful.");
     } catch (error) {
@@ -219,34 +209,34 @@ export default function NewTransactionPage() {
   };
 
   const cancelTransaction = () => {
-    setSelectedSupplier(null);
+    setSelectedShopkeeper(null);
     setSelectedItems([]);
   };
 
   return (
     <div className="container mx-auto py-10">
-      <h1 className="text-2xl font-bold mb-5">New Transaction</h1>
+      <h1 className="text-2xl font-bold mb-5">New Transaction (Shopkeeper)</h1>
       {loading && <p className="text-center text-gray-500">Loading...</p>}
 
       <div className="mb-5">
-        <Label htmlFor="supplier">Select Supplier</Label>
+        <Label htmlFor="shopkeeper">Select Shopkeeper</Label>
         <Input
-          id="supplier"
-          list="suppliers"
-          onChange={(e) => setSelectedSupplier(e.target.value)}
-          value={selectedSupplier || ""}
-          placeholder="Search supplier by ID"
+          id="shopkeeper"
+          list="shopkeepers"
+          onChange={(e) => setSelectedShopkeeper(e.target.value)}
+          value={selectedShopkeeper || ""}
+          placeholder="Search shopkeeper by ID"
         />
-        <datalist id="suppliers">
-          {suppliers.map((supplier) => (
-            <option key={supplier.id} value={supplier.id}>
-              {supplier.name}
+        <datalist id="shopkeepers">
+          {shopkeepers.map((shopkeeper) => (
+            <option key={shopkeeper.id} value={shopkeeper.id}>
+              {shopkeeper.name}
             </option>
           ))}
         </datalist>
       </div>
 
-      {selectedSupplier && (
+      {selectedShopkeeper && (
         <>
           <div className="mb-5">
             <Label htmlFor="product">Select Product</Label>
@@ -263,7 +253,7 @@ export default function NewTransactionPage() {
             <datalist id="products">
               {products.map((product) => (
                 <option key={product.id} value={product.id}>
-                  {product.productName} (Stock: {product.stockMultiplier})
+                  {product.name} (Stock: {product.packedStock})
                 </option>
               ))}
             </datalist>
@@ -309,35 +299,26 @@ export default function NewTransactionPage() {
           <TableBody>
             {selectedItems.map((item, index) => (
               <TableRow key={index}>
-                <TableCell>{item.productName}</TableCell>
+                <TableCell>{item.name}</TableCell>
                 <TableCell>{item.unitAmount}</TableCell>
                 <TableCell>{item.sold}</TableCell>
                 <TableCell>{item.returned}</TableCell>
-                <TableCell>{item.productPrice.toLocaleString("en-PK")} PKR</TableCell>
-                <TableCell>
-                  {(item.productPrice * item.unitAmount).toLocaleString("en-PK")} PKR
-                </TableCell>
+                <TableCell>{item.price}</TableCell>
+                <TableCell>{item.price * item.unitAmount}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       )}
 
-      {totalTransactionPrice > 0 && (
-        <div className="mt-5">
-          <p className="text-lg font-semibold">
-            Total Transaction Price: {totalTransactionPrice.toLocaleString("en-PK")} PKR
-          </p>
+      <div className="mt-5 flex justify-between items-center">
+        <h2 className="text-xl">Total Price: ${totalTransactionPrice}</h2>
+        <div className="flex gap-4">
+          <Button onClick={handleTransaction}>Complete Transaction</Button>
+          <Button variant="outline" onClick={cancelTransaction}>
+            Cancel
+          </Button>
         </div>
-      )}
-
-      <div className="flex gap-4 mt-5">
-        <Button onClick={handleTransaction} disabled={loading}>
-          {loading ? "Processing..." : "Make Transaction"}
-        </Button>
-        <Button variant="outline" onClick={cancelTransaction} disabled={loading}>
-          Cancel Transaction
-        </Button>
       </div>
     </div>
   );
